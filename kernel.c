@@ -1,4 +1,5 @@
 #include "kernel.h"
+#include "common.h"
 
 typedef unsigned char uint8_t;
 typedef unsigned int uint32_t;
@@ -41,10 +42,8 @@ void *memset(void *buf, char c, size_t n) {
 
 void kernel_main(void) {
   memset(__bss, 0, (size_t)__bss_end - (size_t)__bss);
-  const char *s = "\n\nHello World!\n";
-  for (int i = 0; s[i] != '\0'; i++) {
-    putchar(s[i]);
-  }
+  printf("\n\nHello %s\n", "World!");
+  printf("1 + 2 = %d, %x\n", 1 + 2, 0x1234abcd);
 
   for (;;) {
     __asm__ __volatile__("wfi");
