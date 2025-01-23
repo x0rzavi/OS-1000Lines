@@ -219,13 +219,37 @@ void delay(void) { // busy waiting
 
 struct process *proc_a;
 struct process *proc_b;
+struct process *current_proc; // currently running process
+struct process *idle_proc; // process to run if there are no runnable processes
+
+void yield(void) {
+  // Search for a runnable process
+  struct process *next = idle_proc;
+  for (int i = 0; i < PROCS_MAX; i++) {
+    struct process *proc = &procs[(current_proc->pid + i) % PROCS_MAX];
+    if (proc->state == PROC_RUNNABLE && proc->pid > 0) {
+      next = proc;
+      break;
+    }
+  }
+
+  // If there's no runnable process other than the current one, return and
+  // continue processing
+  if (next == current_proc)
+    return;
+
+  // Context switch
+  struct process *prev = current_proc;
+  current_proc = next;
+  switch_context(&prev->sp, &next->sp);
+}
 
 void proc_a_entry(void) { // process A entrypoint
   printf("starting process A\n");
   while (1) {
     putchar('A');
-    switch_context(&proc_a->sp, &proc_b->sp); // acts as callee
     delay();
+    yield();
   }
 }
 
@@ -233,8 +257,8 @@ void proc_b_entry(void) { // process B entrypoint
   printf("starting process B\n");
   while (1) {
     putchar('B');
-    switch_context(&proc_b->sp, &proc_a->sp);
     delay();
+    yield();
   }
 }
 
@@ -252,7 +276,12 @@ void kernel_main(void) { // what to be done by kernel
 
   proc_a = create_process((uint32_t)proc_a_entry);
   proc_b = create_process((uint32_t)proc_b_entry);
-  proc_a_entry(); // start running process A
+
+  idle_proc = create_process((uint32_t)NULL);
+  idle_proc->pid = -1; // idle
+  current_proc =
+      idle_proc; // ensures execution context of boot process is saved
+  yield();
 
   PANIC("booted!");
   // printf("unreachable here!\n");
