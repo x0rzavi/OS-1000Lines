@@ -29,7 +29,8 @@ void putchar(char ch) {
   sbi_call(ch, 0, 0, 0, 0, 0, 0, 1 /* Console Putchar */); // eid = 1, fid = 0
 }
 
-__attribute__((naked)) __attribute__((aligned(4))) void kernel_entry(void) {
+__attribute__((naked)) __attribute__((aligned(4))) void
+kernel_entry(void) { // entrypoint to kernel
   __asm__ __volatile__("csrw sscratch, sp\n"
                        "addi sp, sp, -4 * 31\n"
                        "sw ra,  4 * 0(sp)\n"
@@ -67,7 +68,7 @@ __attribute__((naked)) __attribute__((aligned(4))) void kernel_entry(void) {
                        "sw a0, 4 * 30(sp)\n"
 
                        "mv a0, sp\n"
-                       "call handle_trap\n"
+                       "call handle_trap\n" // call trap handler
 
                        "lw ra,  4 * 0(sp)\n"
                        "lw gp,  4 * 1(sp)\n"
@@ -103,15 +104,17 @@ __attribute__((naked)) __attribute__((aligned(4))) void kernel_entry(void) {
                        "sret\n");
 }
 
-void kernel_main(void) {
+void kernel_main(void) { // what to be done by kernel
   memset(__bss, 0, (size_t)__bss_end - (size_t)__bss);
 
   printf("\n\nHello %s\n", "World!");
   printf("\nHi I'm %s\n", "Avishek");
   printf("1 + 2 = %d, %x\n", 1 + 2, 0x1234abcd);
 
-  WRITE_CSR(stvec, (uint32_t)kernel_entry);
-  __asm__ __volatile__("unimp");
+  WRITE_CSR(
+      stvec,
+      (uint32_t)kernel_entry);   // register exception handler in stvec register
+  __asm__ __volatile__("unimp"); // trigger illegal instruction
 
   /*
   PANIC("booted!");
@@ -123,7 +126,8 @@ void kernel_main(void) {
   }
 }
 
-__attribute__((section(".text.boot"))) __attribute__((naked)) void boot(void) {
+__attribute__((section(".text.boot"))) __attribute__((naked)) void
+boot(void) { // start booting OS from here
   __asm__ __volatile__(
       "mv sp, %[stack_top]\n" // set the stack pointer
       "j kernel_main\n"       // jump to the kernel main function
@@ -133,7 +137,7 @@ __attribute__((section(".text.boot"))) __attribute__((naked)) void boot(void) {
   );
 }
 
-void handle_trap(struct trap_frame *f) {
+void handle_trap(struct trap_frame *f) { // trap handler function
   uint32_t scause = READ_CSR(scause);
   uint32_t stval = READ_CSR(stval);
   uint32_t user_pc = READ_CSR(sepc);

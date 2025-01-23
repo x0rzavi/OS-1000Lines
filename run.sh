@@ -6,7 +6,7 @@ QEMU='qemu-system-riscv32'
 BIOS='/usr/lib/riscv64-linux-gnu/opensbi/generic/fw_dynamic.bin'
 
 # Path to clang and compiler flags
-CC=clang # Ubuntu users: use CC=clang
+CC=clang
 CFLAGS="-std=c11 -O2 -g3 -Wall -Wextra --target=riscv32 -ffreestanding -nostdlib"
 
 # Build the kernel
