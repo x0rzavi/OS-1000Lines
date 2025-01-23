@@ -127,9 +127,12 @@ void handle_trap(struct trap_frame *f) { // trap handler function
         user_pc);
 }
 
-__attribute__((naked)) void switch_context(uint32_t *prev_sp,
-                                           uint32_t *next_sp) {
+__attribute__((naked)) void
+switch_context(uint32_t *prev_sp,
+               uint32_t *next_sp) { // acts as callee function
   __asm__ __volatile__(
+      // different stack space for each process
+      // callee function that uses these registers must save and restore
       // Save callee-saved registers onto the current process's stack.
       "addi sp, sp, -13 * 4\n" // Allocate stack space for 13 4-byte registers
       "sw ra,  0  * 4(sp)\n"   // Save callee-saved registers only
@@ -147,6 +150,7 @@ __attribute__((naked)) void switch_context(uint32_t *prev_sp,
       "sw s11, 12 * 4(sp)\n"
 
       // Switch the stack pointer.
+      // a0 = *prev_sp a1 = *next_sp
       "sw sp, (a0)\n" // *prev_sp = sp;
       "lw sp, (a1)\n" // Switch stack pointer (sp) here
 
@@ -165,7 +169,7 @@ __attribute__((naked)) void switch_context(uint32_t *prev_sp,
       "lw s10, 11 * 4(sp)\n"
       "lw s11, 12 * 4(sp)\n"
       "addi sp, sp, 13 * 4\n" // We've popped 13 4-byte registers from the stack
-      "ret\n");
+      "ret\n"); // jump to ra register - proc_b_entry - for the 1st run
 }
 
 struct process procs[PROCS_MAX]; // All process control structures.
@@ -199,7 +203,7 @@ struct process *create_process(uint32_t pc) {
   *--sp = 0;            // s2
   *--sp = 0;            // s1
   *--sp = 0;            // s0
-  *--sp = (uint32_t)pc; // ra
+  *--sp = (uint32_t)pc; // ra - call when returning
 
   // Initialize fields.
   proc->pid = i + 1;
@@ -220,7 +224,7 @@ void proc_a_entry(void) { // process A entrypoint
   printf("starting process A\n");
   while (1) {
     putchar('A');
-    switch_context(&proc_a->sp, &proc_b->sp);
+    switch_context(&proc_a->sp, &proc_b->sp); // acts as callee
     delay();
   }
 }
