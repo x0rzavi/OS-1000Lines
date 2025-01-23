@@ -1,8 +1,8 @@
 #include "kernel.h"
 #include "common.h"
 
-extern char __bss[], __bss_end[],
-    __stack_top[]; // [] - returns start address and not the 0th byte
+extern char __bss[], __bss_end[], __stack_top[], __free_ram[],
+    __free_ram_end[]; // [] - returns start address and not the 0th byte
 
 struct sbiret sbi_call(long arg0, long arg1, long arg2, long arg3, long arg4,
                        long arg5, long fid, long eid) {
@@ -27,6 +27,20 @@ struct sbiret sbi_call(long arg0, long arg1, long arg2, long arg3, long arg4,
 
 void putchar(char ch) {
   sbi_call(ch, 0, 0, 0, 0, 0, 0, 1 /* Console Putchar */); // eid = 1, fid = 0
+}
+
+paddr_t alloc_pages(uint32_t n) {
+  static paddr_t next_paddr =
+      (paddr_t)__free_ram; // value retained - initialized only once - allocate
+                           // sequentially starting from __free_ram
+  paddr_t paddr = next_paddr;
+  next_paddr += n * PAGE_SIZE;
+
+  if (next_paddr > (paddr_t)__free_ram_end)
+    PANIC("Out of memory!");
+
+  memset((void *)paddr, 0, n * PAGE_SIZE);
+  return paddr;
 }
 
 __attribute__((naked)) __attribute__((aligned(4))) void
@@ -107,22 +121,25 @@ kernel_entry(void) { // entrypoint to kernel
 void kernel_main(void) { // what to be done by kernel
   memset(__bss, 0, (size_t)__bss_end - (size_t)__bss);
 
-  printf("\n\nHello %s\n", "World!");
+  printf("\nHello %s\n", "World!");
   printf("\nHi I'm %s\n", "Avishek");
-  printf("1 + 2 = %d, %x\n", 1 + 2, 0x1234abcd);
+  printf("\n1 + 2 = %d, %x\n\n", 1 + 2, 0x1234abcd);
+
+  paddr_t paddr0 = alloc_pages(2);
+  paddr_t paddr1 = alloc_pages(1);
+  printf("alloc_pages test: paddr0=%x\n", paddr0);
+  printf("alloc_pages test: paddr1=%x\n", paddr1);
+
+  PANIC("booted!");
+  // printf("unreachable here!\n");
 
   WRITE_CSR(
       stvec,
       (uint32_t)kernel_entry);   // register exception handler in stvec register
   __asm__ __volatile__("unimp"); // trigger illegal instruction
 
-  /*
-  PANIC("booted!");
-  printf("unreachable here!\n");
-  */
-
   for (;;) {
-    __asm__ __volatile__("wfi");
+    __asm__ __volatile__("wfi"); // wait-for-interrupt to save power
   }
 }
 

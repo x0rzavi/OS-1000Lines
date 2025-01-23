@@ -25,4 +25,9 @@ SECTIONS {
   . = ALIGN(4);
   . += 128 * 1024; /* advance the current address by 128KB */
   __stack_top = .;
+
+  . = ALIGN(4096); /* aligned to 4KB boundary */
+  __free_ram = .;
+  . += 64 * 1024 * 1024; /* 64MB RAM - arbitrary */
+  __free_ram_end = .;
 }
