@@ -71,16 +71,16 @@ void *memcpy(void *dst, const void *src, size_t n) {
   return dst;
 }
 
-void *memset(void *buf, char c, size_t n) {
+void *memset(void *buf, char c, size_t n) { // fill entire buffer with char c
   uint8_t *p = (uint8_t *)buf;
   while (n--)
-    *p++ = c;
+    *p++ = c; // increment the pointer - next element location in memory
   return buf;
 }
 
 char *strcpy(char *dst, const char *src) {
   char *d = dst;
-  while (*src) {
+  while (*src) { // until NULL
     *d++ = *src++;
   }
   *d = '\0';
@@ -88,7 +88,7 @@ char *strcpy(char *dst, const char *src) {
 }
 
 int strcmp(const char *s1, const char *s2) {
-  while (*s1 && *s2) {
+  while (*s1 && *s2) { // until either NULL
     if (*s1 != *s2) {
       break;
     }

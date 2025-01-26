@@ -19,7 +19,7 @@
 #define WRITE_CSR(reg, value)                                                  \
   do {                                                                         \
     uint32_t __tmp = (value);                                                  \
-    __asm__ __volatile__("csrw " #reg ", %0" ::"r"(__tmp));                    \
+    __asm__ __volatile__("csrw " #reg ", %0" : : "r"(__tmp));                  \
   } while (0)
 
 struct sbiret {
@@ -69,6 +69,6 @@ struct trap_frame {
 struct process {
   int pid;             // Process ID
   int state;           // Process state: PROC_UNUSED or PROC_RUNNABLE
-  vaddr_t sp;          // Stack pointer
-  uint8_t stack[8192]; // Kernel stack
+  vaddr_t sp;          // Stack pointer pointing to kernel stack
+  uint8_t stack[8192]; // Kernel stack of the process - 8KB
 };

@@ -22,9 +22,9 @@ SECTIONS {
     __bss_end = .;
   }
 
-  . = ALIGN(4);
+  . = ALIGN(4); 
   . += 128 * 1024; /* advance the current address by 128KB */
-  __stack_top = .;
+  __stack_top = .; /* kernel stack */
 
   . = ALIGN(4096); /* aligned to 4KB boundary */
   __free_ram = .;

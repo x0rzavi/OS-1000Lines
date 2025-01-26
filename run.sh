@@ -3,7 +3,7 @@ set -xue
 
 # QEMU file path
 QEMU='qemu-system-riscv32'
-BIOS='/usr/lib/riscv64-linux-gnu/opensbi/generic/fw_dynamic.bin'
+BIOS='./opensbi-riscv32-generic-fw_dynamic_v1.5.1.bin'
 
 # Path to clang and compiler flags
 CC=clang
@@ -14,5 +14,5 @@ $CC $CFLAGS -Wl,-Tkernel.ld -Wl,-Map=kernel.map -o kernel.elf \
   kernel.c common.c
 
 # Start QEMU
-$QEMU -machine virt -bios default -nographic -serial mon:stdio --no-reboot \
+$QEMU -machine virt -bios $BIOS -nographic -serial mon:stdio --no-reboot \
   -kernel kernel.elf
