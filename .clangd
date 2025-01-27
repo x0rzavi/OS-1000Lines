@@ -1,0 +1,11 @@
+CompileFlags:
+  Add: [
+    -std=c11,
+    -g3, 
+    -Wall, 
+    -Wextra, 
+    --target=riscv32, 
+    -ffreestanding, 
+    -nostdlib,
+    -xc
+]
