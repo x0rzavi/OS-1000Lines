@@ -368,6 +368,11 @@ void proc_b_entry(void) { // process B entrypoint
 
 void handle_syscall(struct trap_frame *frame) {
   switch (frame->a3) {
+  case SYS_EXIT:
+    printf("process %d exited\n", current_proc->pid);
+    current_proc->state = PROC_EXITED;
+    yield();
+    PANIC("unreachable");
   case SYS_GETCHAR:
     while (1) {
       long ch = getchar();
