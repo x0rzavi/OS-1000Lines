@@ -4,6 +4,11 @@
 extern char __bss[], __bss_end[], __stack_top[], __free_ram[], __free_ram_end[],
     __kernel_base[]; // [] - returns start address and not the 0th byte
 
+// The base virtual address of an application image. This needs to match the
+// starting address defined in `user.ld`.
+#define USER_BASE 0x1000000
+extern char _binary_shell_bin_start[], _binary_shell_bin_size[];
+
 struct sbiret sbi_call(long arg0, long arg1, long arg2, long arg3, long arg4,
                        long arg5, long fid, long eid) {
   register long a0 __asm__("a0") = arg0;
@@ -71,6 +76,8 @@ void map_page(uint32_t *table1, vaddr_t vaddr, paddr_t paddr, uint32_t flags) {
       PAGE_V; // make room for flags
               // entry contains the physical page number and not address
 }
+
+void user_entry(void) { PANIC("not yet implemented"); }
 
 __attribute__((naked)) __attribute__((aligned(4))) void
 kernel_entry(void) { // entrypoint to kernel
@@ -222,7 +229,7 @@ switch_context(uint32_t *prev_sp,
 
 struct process procs[PROCS_MAX]; // All process control structures.
 
-struct process *create_process(uint32_t pc) {
+struct process *create_process(const void *image, size_t image_size) {
   // Find an unused process control structure.
   struct process *proc = NULL;
   int i;
@@ -239,26 +246,40 @@ struct process *create_process(uint32_t pc) {
   // Stack callee-saved registers. These register values will be restored in
   // the first context switch in switch_context.
   uint32_t *sp = (uint32_t *)&proc->stack[sizeof(proc->stack)];
-  *--sp = 0;            // s11
-  *--sp = 0;            // s10
-  *--sp = 0;            // s9
-  *--sp = 0;            // s8
-  *--sp = 0;            // s7
-  *--sp = 0;            // s6
-  *--sp = 0;            // s5
-  *--sp = 0;            // s4
-  *--sp = 0;            // s3
-  *--sp = 0;            // s2
-  *--sp = 0;            // s1
-  *--sp = 0;            // s0
-  *--sp = (uint32_t)pc; // ra - call when returning
-                        // initial ra is pc - will change later
+  *--sp = 0;                    // s11
+  *--sp = 0;                    // s10
+  *--sp = 0;                    // s9
+  *--sp = 0;                    // s8
+  *--sp = 0;                    // s7
+  *--sp = 0;                    // s6
+  *--sp = 0;                    // s5
+  *--sp = 0;                    // s4
+  *--sp = 0;                    // s3
+  *--sp = 0;                    // s2
+  *--sp = 0;                    // s1
+  *--sp = 0;                    // s0
+  *--sp = (uint32_t)user_entry; // ra
 
   // Map kernel pages such that it can access anything
   uint32_t *page_table = (uint32_t *)alloc_pages(1);
   for (paddr_t paddr = (paddr_t)__kernel_base; paddr < (paddr_t)__free_ram_end;
        paddr += PAGE_SIZE) {
     map_page(page_table, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);
+  }
+
+  // Map user pages
+  for (uint32_t off = 0; off < image_size; off += PAGE_SIZE) {
+    paddr_t page = alloc_pages(1);
+
+    // Handle the case where the data to be copied is smaller than the
+    // page size.
+    size_t remaining = image_size - off;
+    size_t copy_size = PAGE_SIZE <= remaining ? PAGE_SIZE : remaining;
+
+    // Fill and map the page.
+    memcpy((void *)page, image + off, copy_size);
+    map_page(page_table, USER_BASE + off, page,
+             PAGE_U | PAGE_R | PAGE_W | PAGE_X);
   }
 
   // Initialize fields.
@@ -344,17 +365,21 @@ void kernel_main(void) { // what to be done by kernel
   printf("alloc_pages test: paddr0=%x\n", paddr0);
   printf("alloc_pages test: paddr1=%x\n", paddr1);
 
+  /*
   proc_a = create_process((uint32_t)proc_a_entry);
   proc_b = create_process((uint32_t)proc_b_entry);
+  */
 
-  idle_proc = create_process((uint32_t)NULL);
+  idle_proc = create_process(NULL, 0);
   idle_proc->pid = -1; // idle
   current_proc =
       idle_proc; // ensures execution context of boot process is saved and
                  // restored when all processes finish execution
+
+  create_process(_binary_shell_bin_start, (size_t)_binary_shell_bin_size);
   yield();
 
-  PANIC("booted!");
+  PANIC("switched to idle process");
   // printf("unreachable here!\n");
 
   WRITE_CSR(
