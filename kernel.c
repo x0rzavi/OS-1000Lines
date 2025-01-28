@@ -380,7 +380,7 @@ void handle_syscall(struct trap_frame *frame) {
         frame->a0 = ch;
         break;
       }
-      yield(); // don't block CPU
+      yield(); // don't block CPU while taking input
     }
     break;
   case SYS_PUTCHAR:

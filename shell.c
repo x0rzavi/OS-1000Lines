@@ -10,6 +10,10 @@ void main(void) {
 
   // printf("\nHello World from shell!\n");
 
+  // test not saving sscratch during context switching
+  // __asm__ __volatile__("li sp, 0xdeadbeef\n" // set an invalid address as sp
+  //                      "unimp");             // trigger exception
+
   while (1) {
   prompt:
     printf("> ");
