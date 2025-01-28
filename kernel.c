@@ -34,6 +34,11 @@ void putchar(char ch) {
   sbi_call(ch, 0, 0, 0, 0, 0, 0, 1 /* Console Putchar */); // eid = 1, fid = 0
 }
 
+long getchar(void) {
+  struct sbiret ret = sbi_call(0, 0, 0, 0, 0, 0, 0, 2);
+  return ret.error; // -1 if no input
+}
+
 paddr_t alloc_pages(uint32_t n) {
   static paddr_t next_paddr =
       (paddr_t)__free_ram; // value retained - initialized only once - allocate
@@ -175,33 +180,6 @@ kernel_entry(void) { // entrypoint to kernel
       "lw s11, 4 * 29(sp)\n"
       "lw sp,  4 * 30(sp)\n"
       "sret\n"); // return to value stored in sepc (program counter)
-}
-
-void handle_syscall(struct trap_frame *frame) {
-  switch (frame->a3) {
-  case SYS_PUTCHAR:
-    putchar(frame->a0);
-    break;
-  default:
-    PANIC("unexpected syscall a3=%x\n", frame->a3);
-  }
-}
-
-void handle_trap(
-    struct trap_frame
-        *frame /* trap_frame was passed as reg a0 */) { // trap handler function
-  uint32_t scause = READ_CSR(scause);
-  uint32_t stval = READ_CSR(stval);
-  uint32_t user_pc = READ_CSR(sepc);
-  if (scause == SCAUSE_ECALL) {
-    handle_syscall(frame);
-    user_pc += 4;
-  } else {
-    PANIC("unexpected trap scause=%x, stval=%x, sepc=%x\n", scause, stval,
-          user_pc);
-  }
-
-  WRITE_CSR(sepc, user_pc); // return back to sepc
 }
 
 __attribute__((naked)) void
@@ -388,6 +366,43 @@ void proc_b_entry(void) { // process B entrypoint
   }
 }
 
+void handle_syscall(struct trap_frame *frame) {
+  switch (frame->a3) {
+  case SYS_GETCHAR:
+    while (1) {
+      long ch = getchar();
+      if (ch >= 0) {
+        frame->a0 = ch;
+        break;
+      }
+      yield(); // don't block CPU
+    }
+    break;
+  case SYS_PUTCHAR:
+    putchar(frame->a0);
+    break;
+  default:
+    PANIC("unexpected syscall a3=%x\n", frame->a3);
+  }
+}
+
+void handle_trap(
+    struct trap_frame
+        *frame /* trap_frame was passed as reg a0 */) { // trap handler function
+  uint32_t scause = READ_CSR(scause);
+  uint32_t stval = READ_CSR(stval);
+  uint32_t user_pc = READ_CSR(sepc);
+  if (scause == SCAUSE_ECALL) {
+    handle_syscall(frame);
+    user_pc += 4;
+  } else {
+    PANIC("unexpected trap scause=%x, stval=%x, sepc=%x\n", scause, stval,
+          user_pc);
+  }
+
+  WRITE_CSR(sepc, user_pc); // return back to sepc
+}
+
 void kernel_main(void) { // what to be done by kernel
   memset(__bss, 0, (size_t)__bss_end - (size_t)__bss);
 
@@ -411,8 +426,8 @@ void kernel_main(void) { // what to be done by kernel
       idle_proc; // ensures execution context of boot process is saved and
                  // restored when all processes finish execution
 
-  proc_a = create_process((uint32_t)proc_a_entry, NULL, 0); // kernel process
-  proc_b = create_process((uint32_t)proc_b_entry, NULL, 0); // kernel process
+  // proc_a = create_process((uint32_t)proc_a_entry, NULL, 0); // kernel process
+  // proc_b = create_process((uint32_t)proc_b_entry, NULL, 0); // kernel process
   proc_c = create_process((uint32_t)user_entry,
                           _binary_shell_bin_start, // user process (shell)
                           (size_t)_binary_shell_bin_size);

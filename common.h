@@ -30,3 +30,4 @@ int strcmp(const char *s1, const char *s2);
 void printf(const char *fmt, ...);
 
 #define SYS_PUTCHAR 1
+#define SYS_GETCHAR 2
