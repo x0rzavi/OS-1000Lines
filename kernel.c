@@ -42,10 +42,10 @@ paddr_t alloc_pages(uint32_t n) {
   next_paddr += n * PAGE_SIZE;
 
   if (next_paddr > (paddr_t)__free_ram_end)
-    PANIC("Out of memory!");
+    PANIC("out of memory!");
 
   memset((void *)paddr, 0, n * PAGE_SIZE);           // fill memory area with 0s
-  printf("Allocated memory address: 0x%x\n", paddr); // DEBUG
+  printf("allocated memory address: 0x%x\n", paddr); // DEBUG
   return paddr;
 }
 
@@ -177,15 +177,31 @@ kernel_entry(void) { // entrypoint to kernel
       "sret\n"); // return to value stored in sepc (program counter)
 }
 
+void handle_syscall(struct trap_frame *frame) {
+  switch (frame->a3) {
+  case SYS_PUTCHAR:
+    putchar(frame->a0);
+    break;
+  default:
+    PANIC("unexpected syscall a3=%x\n", frame->a3);
+  }
+}
+
 void handle_trap(
     struct trap_frame
         *frame /* trap_frame was passed as reg a0 */) { // trap handler function
   uint32_t scause = READ_CSR(scause);
   uint32_t stval = READ_CSR(stval);
   uint32_t user_pc = READ_CSR(sepc);
+  if (scause == SCAUSE_ECALL) {
+    handle_syscall(frame);
+    user_pc += 4;
+  } else {
+    PANIC("unexpected trap scause=%x, stval=%x, sepc=%x\n", scause, stval,
+          user_pc);
+  }
 
-  PANIC("unexpected trap scause=%x, stval=%x, sepc=%x\n", scause, stval,
-        user_pc);
+  WRITE_CSR(sepc, user_pc); // return back to sepc
 }
 
 __attribute__((naked)) void
