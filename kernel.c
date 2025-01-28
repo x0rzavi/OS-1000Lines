@@ -77,7 +77,14 @@ void map_page(uint32_t *table1, vaddr_t vaddr, paddr_t paddr, uint32_t flags) {
               // entry contains the physical page number and not address
 }
 
-void user_entry(void) { PANIC("not yet implemented"); }
+// __attribute__((naked)) is very important!
+__attribute__((naked)) void user_entry(void) {
+  __asm__ __volatile__("csrw sepc, %[sepc]        \n"
+                       "csrw sstatus, %[sstatus]  \n"
+                       "sret                      \n" // jumps to sepc
+                       :
+                       : [sepc] "r"(USER_BASE), [sstatus] "r"(SSTATUS_SPIE));
+}
 
 __attribute__((naked)) __attribute__((aligned(4))) void
 kernel_entry(void) { // entrypoint to kernel
@@ -260,8 +267,9 @@ struct process *create_process(const void *image, size_t image_size) {
   *--sp = 0;                    // s0
   *--sp = (uint32_t)user_entry; // ra
 
-  // Map kernel pages such that it can access anything
   uint32_t *page_table = (uint32_t *)alloc_pages(1);
+
+  // Map kernel pages such that it can access anything
   for (paddr_t paddr = (paddr_t)__kernel_base; paddr < (paddr_t)__free_ram_end;
        paddr += PAGE_SIZE) {
     map_page(page_table, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);
@@ -356,6 +364,12 @@ void proc_b_entry(void) { // process B entrypoint
 void kernel_main(void) { // what to be done by kernel
   memset(__bss, 0, (size_t)__bss_end - (size_t)__bss);
 
+  WRITE_CSR( // placement is important to catch exceptions
+      stvec,
+      (uint32_t)kernel_entry); // register exception handler in stvec register
+  // __asm__ __volatile__("unimp"); // trigger illegal instruction
+
+  /*
   printf("\nHello %s", "World!");
   printf("\nHi I'm %s", "Avishek");
   printf("\n1 + 2 = %d, %x\n", 1 + 2, 0x1234abcd);
@@ -365,7 +379,6 @@ void kernel_main(void) { // what to be done by kernel
   printf("alloc_pages test: paddr0=%x\n", paddr0);
   printf("alloc_pages test: paddr1=%x\n", paddr1);
 
-  /*
   proc_a = create_process((uint32_t)proc_a_entry);
   proc_b = create_process((uint32_t)proc_b_entry);
   */
@@ -381,11 +394,6 @@ void kernel_main(void) { // what to be done by kernel
 
   PANIC("switched to idle process");
   // printf("unreachable here!\n");
-
-  WRITE_CSR(
-      stvec,
-      (uint32_t)kernel_entry);   // register exception handler in stvec register
-  __asm__ __volatile__("unimp"); // trigger illegal instruction
 
   for (;;) {
     __asm__ __volatile__("wfi"); // wait-for-interrupt to save power
