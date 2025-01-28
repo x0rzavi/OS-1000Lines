@@ -1,8 +1,8 @@
 #include "kernel.h"
 #include "common.h"
 
-extern char __bss[], __bss_end[], __stack_top[], __free_ram[],
-    __free_ram_end[]; // [] - returns start address and not the 0th byte
+extern char __bss[], __bss_end[], __stack_top[], __free_ram[], __free_ram_end[],
+    __kernel_base[]; // [] - returns start address and not the 0th byte
 
 struct sbiret sbi_call(long arg0, long arg1, long arg2, long arg3, long arg4,
                        long arg5, long fid, long eid) {
@@ -41,6 +41,35 @@ paddr_t alloc_pages(uint32_t n) {
 
   memset((void *)paddr, 0, n * PAGE_SIZE); // fill memory area with 0s
   return paddr;
+}
+
+void map_page(uint32_t *table1, vaddr_t vaddr, paddr_t paddr, uint32_t flags) {
+  if (!is_aligned(vaddr, PAGE_SIZE)) {
+    PANIC("unaligned vaddr %x", vaddr);
+  }
+
+  if (!is_aligned(paddr, PAGE_SIZE)) {
+    PANIC("unaligned paddr %x", paddr);
+  }
+
+  uint32_t vpn1 =
+      (vaddr >> 22) & 0x3ff; // right shift 22bits + bit mask 11_1111_1111
+  if ((table1[vpn1] & PAGE_V) == 0) {
+    // Create the non-existent 2nd level page table.
+    uint32_t pt_paddr = alloc_pages(1);
+    table1[vpn1] = ((pt_paddr / PAGE_SIZE) << 10) |
+                   PAGE_V; // lower bits (0-9) used for flags
+  }
+
+  // Set the 2nd level page table entry to map the physical page.
+  uint32_t vpn0 =
+      (vaddr >> 12) & 0x3ff; // right shift 12bits + bit mask 11_1111_1111
+  uint32_t *table0 =
+      (uint32_t *)((table1[vpn1] >> 10) * PAGE_SIZE); // don't need flags here
+  table0[vpn0] =
+      ((paddr / PAGE_SIZE) << 10) | flags |
+      PAGE_V; // make room for flags
+              // entry contains the physical page number and not address
 }
 
 __attribute__((naked)) __attribute__((aligned(4))) void
@@ -225,15 +254,23 @@ struct process *create_process(uint32_t pc) {
   *--sp = (uint32_t)pc; // ra - call when returning
                         // initial ra is pc - will change later
 
+  // Map kernel pages such that it can access anything
+  uint32_t *page_table = (uint32_t *)alloc_pages(1);
+  for (paddr_t paddr = (paddr_t)__kernel_base; paddr < (paddr_t)__free_ram_end;
+       paddr += PAGE_SIZE) {
+    map_page(page_table, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);
+  }
+
   // Initialize fields.
   proc->pid = i + 1;
   proc->state = PROC_RUNNABLE;
   proc->sp = (uint32_t)sp;
+  proc->page_table = page_table;
   return proc;
 }
 
 void delay(void) { // busy waiting
-  for (int i = 0; i < 300000000; i++)
+  for (int i = 0; i < 200000000; i++)
     __asm__ __volatile__("nop"); // do nothing
 }
 
@@ -259,11 +296,17 @@ void yield(void) {
   if (next == current_proc)
     return;
 
-  __asm__ __volatile__("csrw sscratch, %[sscratch]\n"
-                       :
-                       : [sscratch] "r"((uint32_t)&next->stack[sizeof(
-                           next->stack)])); // store TOS of next process to help
-                                            // in exception handling
+  __asm__ __volatile__(
+      "sfence.vma\n" // clear TLB & fence memory
+      "csrw satp, %[satp]\n"
+      "sfence.vma\n"
+      "csrw sscratch, %[sscratch]\n"
+      :
+      : [satp] "r"(SATP_SV32 | ((uint32_t)next->page_table /
+                                PAGE_SIZE)), // PPN bits in satp register 21-0
+        [sscratch] "r"((uint32_t)&next->stack[sizeof(
+            next->stack)])); // store TOS of next process to help in exception
+                             // handling
 
   // Context switch
   struct process *prev = current_proc;

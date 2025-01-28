@@ -2,6 +2,7 @@ ENTRY(boot) /* boot function is the entry point of the kernel (program) */
 
 SECTIONS {
   . = 0x80200000; /* base address - dot represents current address - auto increments */
+  __kernel_base = .; /* starting address used by kernel */
 
   .text :{
     KEEP(*(.text.boot)); /* place at the beginning */
