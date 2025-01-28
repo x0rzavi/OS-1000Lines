@@ -44,7 +44,8 @@ paddr_t alloc_pages(uint32_t n) {
   if (next_paddr > (paddr_t)__free_ram_end)
     PANIC("Out of memory!");
 
-  memset((void *)paddr, 0, n * PAGE_SIZE); // fill memory area with 0s
+  memset((void *)paddr, 0, n * PAGE_SIZE);           // fill memory area with 0s
+  printf("Allocated memory address: 0x%x\n", paddr); // DEBUG
   return paddr;
 }
 
@@ -236,7 +237,8 @@ switch_context(uint32_t *prev_sp,
 
 struct process procs[PROCS_MAX]; // All process control structures.
 
-struct process *create_process(const void *image, size_t image_size) {
+struct process *create_process(uint32_t pc, const void *image,
+                               size_t image_size) {
   // Find an unused process control structure.
   struct process *proc = NULL;
   int i;
@@ -253,41 +255,44 @@ struct process *create_process(const void *image, size_t image_size) {
   // Stack callee-saved registers. These register values will be restored in
   // the first context switch in switch_context.
   uint32_t *sp = (uint32_t *)&proc->stack[sizeof(proc->stack)];
-  *--sp = 0;                    // s11
-  *--sp = 0;                    // s10
-  *--sp = 0;                    // s9
-  *--sp = 0;                    // s8
-  *--sp = 0;                    // s7
-  *--sp = 0;                    // s6
-  *--sp = 0;                    // s5
-  *--sp = 0;                    // s4
-  *--sp = 0;                    // s3
-  *--sp = 0;                    // s2
-  *--sp = 0;                    // s1
-  *--sp = 0;                    // s0
-  *--sp = (uint32_t)user_entry; // ra
+  *--sp = 0;            // s11
+  *--sp = 0;            // s10
+  *--sp = 0;            // s9
+  *--sp = 0;            // s8
+  *--sp = 0;            // s7
+  *--sp = 0;            // s6
+  *--sp = 0;            // s5
+  *--sp = 0;            // s4
+  *--sp = 0;            // s3
+  *--sp = 0;            // s2
+  *--sp = 0;            // s1
+  *--sp = 0;            // s0
+  *--sp = (uint32_t)pc; // ra
 
   uint32_t *page_table = (uint32_t *)alloc_pages(1);
 
   // Map kernel pages such that it can access anything
   for (paddr_t paddr = (paddr_t)__kernel_base; paddr < (paddr_t)__free_ram_end;
        paddr += PAGE_SIZE) {
-    map_page(page_table, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);
+    map_page(page_table, paddr, paddr,
+             PAGE_R | PAGE_W | PAGE_X); // vaddr = paddr
   }
 
   // Map user pages
-  for (uint32_t off = 0; off < image_size; off += PAGE_SIZE) {
-    paddr_t page = alloc_pages(1);
+  if (image) {
+    for (uint32_t off = 0; off < image_size; off += PAGE_SIZE) {
+      paddr_t page = alloc_pages(1);
 
-    // Handle the case where the data to be copied is smaller than the
-    // page size.
-    size_t remaining = image_size - off;
-    size_t copy_size = PAGE_SIZE <= remaining ? PAGE_SIZE : remaining;
+      // Handle the case where the data to be copied is smaller than the
+      // page size.
+      size_t remaining = image_size - off;
+      size_t copy_size = PAGE_SIZE <= remaining ? PAGE_SIZE : remaining;
 
-    // Fill and map the page.
-    memcpy((void *)page, image + off, copy_size);
-    map_page(page_table, USER_BASE + off, page,
-             PAGE_U | PAGE_R | PAGE_W | PAGE_X);
+      // Fill and map the page.
+      memcpy((void *)page, image + off, copy_size);
+      map_page(page_table, USER_BASE + off, page,
+               PAGE_U | PAGE_R | PAGE_W | PAGE_X);
+    }
   }
 
   // Initialize fields.
@@ -305,6 +310,7 @@ void delay(void) { // busy waiting
 
 struct process *proc_a;
 struct process *proc_b;
+struct process *proc_c;
 
 struct process *current_proc; // currently running process
 struct process *idle_proc; // process to run if there are no runnable processes
@@ -369,7 +375,6 @@ void kernel_main(void) { // what to be done by kernel
       (uint32_t)kernel_entry); // register exception handler in stvec register
   // __asm__ __volatile__("unimp"); // trigger illegal instruction
 
-  /*
   printf("\nHello %s", "World!");
   printf("\nHi I'm %s", "Avishek");
   printf("\n1 + 2 = %d, %x\n", 1 + 2, 0x1234abcd);
@@ -379,17 +384,17 @@ void kernel_main(void) { // what to be done by kernel
   printf("alloc_pages test: paddr0=%x\n", paddr0);
   printf("alloc_pages test: paddr1=%x\n", paddr1);
 
-  proc_a = create_process((uint32_t)proc_a_entry);
-  proc_b = create_process((uint32_t)proc_b_entry);
-  */
-
-  idle_proc = create_process(NULL, 0);
+  idle_proc = create_process((uint32_t)NULL, NULL, 0);
   idle_proc->pid = -1; // idle
   current_proc =
       idle_proc; // ensures execution context of boot process is saved and
                  // restored when all processes finish execution
 
-  create_process(_binary_shell_bin_start, (size_t)_binary_shell_bin_size);
+  proc_a = create_process((uint32_t)proc_a_entry, NULL, 0); // kernel process
+  proc_b = create_process((uint32_t)proc_b_entry, NULL, 0); // kernel process
+  proc_c = create_process((uint32_t)user_entry,
+                          _binary_shell_bin_start, // user process (shell)
+                          (size_t)_binary_shell_bin_size);
   yield();
 
   PANIC("switched to idle process");

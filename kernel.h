@@ -81,4 +81,4 @@ struct process {
 #define PAGE_X (1 << 3)      // Executable - left shift 3bits
 #define PAGE_U (1 << 4)      // User (accessible in user mode)
 
-#define SSTATUS_SPIE (1 << 5)
+#define SSTATUS_SPIE (1 << 5) // switch mode from S to U
