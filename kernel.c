@@ -44,7 +44,7 @@ paddr_t alloc_pages(uint32_t n) {
 }
 
 void map_page(uint32_t *table1, vaddr_t vaddr, paddr_t paddr, uint32_t flags) {
-  if (!is_aligned(vaddr, PAGE_SIZE)) {
+  if (!is_aligned(vaddr, PAGE_SIZE)) { // TODO: revisit
     PANIC("unaligned vaddr %x", vaddr);
   }
 
