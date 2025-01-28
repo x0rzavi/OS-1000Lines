@@ -1,5 +1,7 @@
 #include "kernel.h"
 #include "common.h"
+#undef DEBUG
+#undef TEST
 
 extern char __bss[], __bss_end[], __stack_top[], __free_ram[], __free_ram_end[],
     __kernel_base[]; // [] - returns start address and not the 0th byte
@@ -49,8 +51,10 @@ paddr_t alloc_pages(uint32_t n) {
   if (next_paddr > (paddr_t)__free_ram_end)
     PANIC("out of memory!");
 
-  memset((void *)paddr, 0, n * PAGE_SIZE);           // fill memory area with 0s
-  printf("allocated memory address: 0x%x\n", paddr); // DEBUG
+  memset((void *)paddr, 0, n * PAGE_SIZE); // fill memory area with 0s
+#ifdef DEBUG
+  printf("allocated memory address: 0x%x\n", paddr);
+#endif /* ifdef DEBUG */
   return paddr;
 }
 
@@ -350,8 +354,10 @@ void proc_a_entry(void) { // process A entrypoint
   printf("starting process A\n");
   while (1) {
     putchar('A');
+#ifdef TEST
     *((volatile int *)0x80300000) =
         0x1234; // valid write to kernel memory space from kernel process
+#endif          /* ifdef TEST */
     delay();
     yield();
   }
@@ -372,7 +378,7 @@ void handle_syscall(struct trap_frame *frame) {
     printf("process %d exited\n", current_proc->pid);
     current_proc->state = PROC_EXITED;
     yield();
-    PANIC("unreachable");
+    PANIC("unreachable"); // just in case process returns
   case SYS_GETCHAR:
     while (1) {
       long ch = getchar();
@@ -416,6 +422,7 @@ void kernel_main(void) { // what to be done by kernel
       (uint32_t)kernel_entry); // register exception handler in stvec register
   // __asm__ __volatile__("unimp"); // trigger illegal instruction
 
+#ifdef DEBUG
   printf("\nHello %s", "World!");
   printf("\nHi I'm %s", "Avishek");
   printf("\n1 + 2 = %d, %x\n", 1 + 2, 0x1234abcd);
@@ -424,22 +431,25 @@ void kernel_main(void) { // what to be done by kernel
   paddr_t paddr1 = alloc_pages(1);
   printf("alloc_pages test: paddr0=%x\n", paddr0);
   printf("alloc_pages test: paddr1=%x\n", paddr1);
+#endif /* ifdef DEBUG */
 
+  printf("\nBOOTED OS!\n");
   idle_proc = create_process((uint32_t)NULL, NULL, 0);
   idle_proc->pid = -1; // idle
   current_proc =
       idle_proc; // ensures execution context of boot process is saved and
                  // restored when all processes finish execution
 
-  // proc_a = create_process((uint32_t)proc_a_entry, NULL, 0); // kernel process
-  // proc_b = create_process((uint32_t)proc_b_entry, NULL, 0); // kernel process
+#ifdef TEST
+  proc_a = create_process((uint32_t)proc_a_entry, NULL, 0); // kernel process
+  proc_b = create_process((uint32_t)proc_b_entry, NULL, 0); // kernel process
+#endif                                                      /* ifdef TEST */
   proc_c = create_process((uint32_t)user_entry,
                           _binary_shell_bin_start, // user process (shell)
                           (size_t)_binary_shell_bin_size);
   yield();
 
   PANIC("switched to idle process");
-  // printf("unreachable here!\n");
 
   for (;;) {
     __asm__ __volatile__("wfi"); // wait-for-interrupt to save power
