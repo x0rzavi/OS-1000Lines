@@ -78,13 +78,15 @@ void map_page(uint32_t *table1, vaddr_t vaddr, paddr_t paddr, uint32_t flags) {
               // entry contains the physical page number and not address
 }
 
-// __attribute__((naked)) is very important!
+// __attribute__((naked)) is very important! - compile without any compiler
+// generated function prologue/epilogue code
 __attribute__((naked)) void user_entry(void) {
-  __asm__ __volatile__("csrw sepc, %[sepc]        \n"
-                       "csrw sstatus, %[sstatus]  \n"
-                       "sret                      \n" // jumps to sepc
-                       :
-                       : [sepc] "r"(USER_BASE), [sstatus] "r"(SSTATUS_SPIE));
+  __asm__ __volatile__(
+      "csrw sepc, %[sepc]        \n"
+      "csrw sstatus, %[sstatus]  \n"
+      "sret                      \n" // jumps to sepc - switches to U-mode
+      :
+      : [sepc] "r"(USER_BASE), [sstatus] "r"(SSTATUS_SPIE));
 }
 
 __attribute__((naked)) __attribute__((aligned(4))) void
@@ -278,19 +280,20 @@ struct process *create_process(uint32_t pc, const void *image,
              PAGE_R | PAGE_W | PAGE_X); // vaddr = paddr
   }
 
-  // Map user pages
+  // Map & allocate user pages for user program
   if (image) {
-    for (uint32_t off = 0; off < image_size; off += PAGE_SIZE) {
+    for (uint32_t image_offset = 0; image_offset < image_size;
+         image_offset += PAGE_SIZE) {
       paddr_t page = alloc_pages(1);
 
       // Handle the case where the data to be copied is smaller than the
       // page size.
-      size_t remaining = image_size - off;
+      size_t remaining = image_size - image_offset;
       size_t copy_size = PAGE_SIZE <= remaining ? PAGE_SIZE : remaining;
 
       // Fill and map the page.
-      memcpy((void *)page, image + off, copy_size);
-      map_page(page_table, USER_BASE + off, page,
+      memcpy((void *)page, image + image_offset, copy_size);
+      map_page(page_table, USER_BASE + image_offset, page,
                PAGE_U | PAGE_R | PAGE_W | PAGE_X);
     }
   }
@@ -353,6 +356,8 @@ void proc_a_entry(void) { // process A entrypoint
   printf("starting process A\n");
   while (1) {
     putchar('A');
+    *((volatile int *)0x80300000) =
+        0x1234; // valid write to kernel memory space from kernel process
     delay();
     yield();
   }

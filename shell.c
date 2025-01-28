@@ -1,8 +1,8 @@
 #include "user.h"
 
 void main(void) {
-  *((volatile int *)0x80200000) =
-      0x1234; // invalid write to kernel memory space
+  *((volatile int *)0x80300000) =
+      0x1234; // invalid write to kernel memory space from user process
   for (;;)
     ;
 }
